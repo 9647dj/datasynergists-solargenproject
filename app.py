@@ -76,7 +76,7 @@ st.sidebar.title("☀️ SPICE Generation")
 st.sidebar.markdown("Solar Power Generation Dashboard")
 page = st.sidebar.radio(
     "Navigate",
-    ["🗺️ Map", "📊 Compare to Client", "🔮 Prediction Check", "⚡ The Paradox"]
+    ["🗺️ Map", "📊 Compare to Client", "🔮 Prediction Check", "⚡ The Paradox", "🕒 Hourly Smoke Analysis", "💡 Future Work"]
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -147,6 +147,24 @@ if page == "🗺️ Map":
                 from PIL import Image
                 import io
                 img = Image.open(io.BytesIO(response.content))
+                from PIL import ImageDraw, ImageFont
+                # This draws a dot on the map where Edmonton is based on pixel calculations
+                # BBOX: lat 50-58, lon -120 to -105
+                # Image: 800x600
+                img_width, img_height = 800, 600
+                lat_min, lat_max = 50, 58
+                lon_min, lon_max = -120, -105
+
+                edmonton_lat = 53.5461
+                edmonton_lon = -113.4938
+
+                x = int((edmonton_lon - lon_min) / (lon_max - lon_min) * img_width)
+                y = int((lat_max - edmonton_lat) / (lat_max - lat_min) * img_height)
+
+                draw = ImageDraw.Draw(img)
+                r = 6
+                draw.ellipse([x-r, y-r, x+r, y+r], outline="red", width=3)
+                draw.text((x+10, y-10), "Edmonton", fill="red")
                 st.image(img, caption=f"Edmonton region — {date_str}", use_container_width=True)
             else:
                 st.warning("Could not load satellite image for this date.")
@@ -324,8 +342,8 @@ elif page == "🔮 Prediction Check":
         col3.metric("📊 Difference", f"{diff:+.3f} MW", f"{pct_err:.1f}% error")
 
         st.subheader("Conditions on this day")
-        condition_cols = ["Temperature (degrees C)", "Relative Humidity",
-                          "cloud_pct", "shortwave", "pm25_mean"]
+        condition_cols = ["shortwave", "cloud_pct", "solar_elevation", "attenuation_ratio",
+                        "Temperature (degrees C)", "Relative Humidity"]
         available = [c for c in condition_cols if c in row.index]
         st.dataframe(pd.DataFrame(row[available]).T, use_container_width=True)
 
@@ -340,12 +358,6 @@ elif page == "🔮 Prediction Check":
         ax_imp.set_title("Top 15 Feature Importances — Random Forest")
         plt.tight_layout()
         st.pyplot(fig_imp)
-
-        st.info(
-            "💡 **Future improvement:** Cloud type data (cirrus vs cumulus) could "
-            "significantly improve prediction accuracy. Cirrus clouds filter far less "
-            "sunlight than cumulus, but current data only captures total cloud coverage percentage."
-        )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — THE PARADOX
@@ -517,3 +529,150 @@ elif page == "⚡ The Paradox":
         plt.suptitle(f"Smoke Event Window — {event}", fontsize=11)
         plt.tight_layout()
         st.pyplot(fig2)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 5 - HOURLY SMOKE ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🕒 Hourly Smoke Analysis":
+    st.title("🕒 Hourly Smoke Analysis")
+    st.markdown(
+        "Explore hourly solar generation and PM2.5 across a ±3 day window around "
+        "a smoke event. Nighttime gaps are shaded — PM2.5 readings across those "
+        "gaps are not directly comparable to adjacent daylight hours."
+    )
+
+    df_hourly = df.copy()
+    df_hourly["date"] = df_hourly["dt"].dt.date
+    df_hourly["hour"] = df_hourly["dt"].dt.hour
+
+    event_choice = st.selectbox(
+        "Select a wildfire event (auto-fills date)",
+        ["Custom date"] + list(wildfire_events.keys())
+    )
+
+    if event_choice == "Custom date":
+        selected_date = st.date_input(
+            "Choose a date",
+            value=df_hourly["date"].min(),
+            min_value=df_hourly["date"].min(),
+            max_value=df_hourly["date"].max()
+        )
+        center_dt = pd.Timestamp(selected_date)
+    else:
+        start, end, peak_date_str = wildfire_events[event_choice]
+        center_dt = pd.Timestamp(peak_date_str)
+        st.caption(f"Peak smoke day: {center_dt.date()}")
+
+    # ±3 days window, daylight only
+    window_start = center_dt - pd.Timedelta(days=3)
+    window_end = center_dt + pd.Timedelta(days=3)
+
+    day_df = df_hourly[
+        (df_hourly["dt"] >= window_start) &
+        (df_hourly["dt"] <= window_end) &
+        (df_hourly["solar_elevation"] > 0)
+    ].copy().sort_values("dt").reset_index(drop=True)
+
+    if day_df.empty:
+        st.warning("No daylight data available for this window.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Peak Hourly PM2.5", f"{day_df['pm25_mean'].max():.1f} µg/m³")
+        col2.metric("Average PM2.5", f"{day_df['pm25_mean'].mean():.1f} µg/m³")
+        col3.metric("Peak Generation", f"{day_df['Volume'].max():.3f} MW")
+
+        fig, ax1 = plt.subplots(figsize=(14, 5))
+
+        # Find night gaps — consecutive rows more than 1 hour apart
+        day_df["time_gap"] = day_df["dt"].diff().dt.total_seconds() / 3600
+        night_gaps = day_df[day_df["time_gap"] > 1]
+
+        # Mark night gaps with vertical dashed lines
+        for _, gap_row in night_gaps.iterrows():
+            gap_x = day_df.loc[gap_row.name - 1, "dt"] + (gap_row["dt"] - day_df.loc[gap_row.name - 1, "dt"]) / 2
+            ax1.axvline(gap_x, color="gray", linestyle=":", linewidth=1.5, alpha=0.7)
+            ax1.annotate("🌙", xy=(gap_x, ax1.get_ylim()[1]),
+                        ha="center", fontsize=10, color="gray")
+
+        from matplotlib.patches import Patch
+        night_patch = Patch(facecolor='navy', alpha=0.15, label='Nighttime gap')
+
+        # Generation line
+        ax1.plot(
+            day_df["dt"], day_df["Volume"],
+            marker="o", linewidth=2, color="#e76f51", markersize=3,
+            label="Solar Generation (MW)"
+        )
+        ax1.set_xlabel("Date & Hour")
+        ax1.set_ylabel("Solar Generation (MW)")
+
+        # PM2.5 line
+        ax2 = ax1.twinx()
+        ax2.plot(
+            day_df["dt"], day_df["pm25_mean"],
+            marker="s", linestyle="--", linewidth=2,
+            color="#2a9d8f", markersize=3, label="PM2.5 (µg/m³)"
+        )
+        ax2.set_ylabel("PM2.5 (µg/m³)")
+
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2 + [night_patch], 
+            labels1 + labels2 + ['Nighttime gap'], 
+            loc="upper left", fontsize=8)
+
+        plt.title(f"Daylight Hours ±3 Days — {event_choice}")
+        plt.xticks(rotation=45)
+        fig.tight_layout()
+        st.pyplot(fig)
+
+        show_cols = ["dt", "hour", "Volume", "pm25_mean"]
+        extra_cols = ["shortwave", "cloud_pct", "solar_elevation", "attenuation_ratio",
+                    "Temperature (degrees C)", "Relative Humidity"]
+        for col in extra_cols:
+            if col in day_df.columns:
+                show_cols.append(col)
+
+        with st.expander("View hourly data table"):
+            st.dataframe(day_df[show_cols].reset_index(drop=True),
+                         use_container_width=True)
+            
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 6 — FUTURE WORK
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "💡 Future Work":
+    st.title("💡 What's Next")
+    st.markdown(
+        "The current model achieves R² = 0.86 tested blind on 2025. "
+        "Here are the most promising directions for improvement."
+    )
+
+    st.subheader("🌥️ Cloud Type Data")
+    st.markdown(
+        "Cloud coverage percentage alone was not in the model's top 15 features — "
+        "the model gravitated toward shortwave radiation and attenuation ratio instead. "
+        "This makes sense: a sky that is 80% covered by cirrus clouds behaves very "
+        "differently from one covered by cumulus. Cirrus is largely transparent to "
+        "shortwave radiation while cumulus blocks it almost entirely. "
+        "Adding cloud fraction by altitude level — low, mid, and high clouds separately "
+        "— would give the model an explicit cloud type signal. "
+        "**ERA5 reanalysis data from Copernicus** provides exactly this at no cost "
+        "and would integrate naturally into the existing data pipeline."
+    )
+
+    st.subheader("🌫️ Aerosol Optical Depth")
+    st.markdown(
+        "PM2.5 is a ground-level measurement and a reasonable smoke proxy, but aerosol "
+        "optical depth (AOD) measures the actual column of particulates between the "
+        "solar panel and the sun — which is what directly affects generation. "
+        "The **Copernicus Atmosphere Monitoring Service (CAMS)** provides AOD data "
+        "publicly and would complement the existing attenuation ratio feature."
+    )
+
+    st.subheader("📡 Expanding to More Sites")
+    st.markdown(
+        "The correlation framework used to fill client site gaps (r = 0.916) suggests "
+        "KKP1 is a strong regional proxy. Using KKP1, we could use the same approach "
+        "with solar data from other SPICE projects as a means of null handling "
+        "and predictions, so long as the other sites have a similar correlation. "
+    )
