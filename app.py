@@ -76,7 +76,7 @@ st.sidebar.title("☀️ SPICE Generation")
 st.sidebar.markdown("Solar Power Generation Dashboard")
 page = st.sidebar.radio(
     "Navigate",
-    ["🗺️ Map", "📊 Compare to Client", "🔮 Prediction Check", "⚡ The Paradox", "🕒 Hourly Smoke Analysis", "💡 Future Work", "🔬 XAI"]
+    ["🗺️ Map", "📊 Compare to Client", "🔮 Prediction Check", "⚡ The Paradox", "🕒 Hourly Smoke Analysis", "🔬 XAI", "💡 Future Work"]
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
