@@ -71,7 +71,7 @@ st.sidebar.title("☀️ SPICE Solar")
 st.sidebar.markdown("Solar Power Generation Dashboard")
 page = st.sidebar.radio(
     "Navigate",
-    ["🗺️ Map", "📊 Client Nulls", "🔮 Free Prediction", "⚡ The Paradox"]
+    ["🗺️ Map", "📊 Compare to Client", "🔮 Prediction Check", "⚡ The Paradox"]
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -149,9 +149,9 @@ if page == "🗺️ Map":
             st.error(f"Error loading image: {e}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE 2 — CLIENT NULLS
+# PAGE 2 — Compare to Client
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📊 Client Nulls":
+elif page == "📊 Compare to Client":
     st.title("📊 Client Site — KKP Correlation & Gap Fill")
     st.markdown(
         "KKP1 and the client site are strongly correlated (r = **0.916**). "
@@ -270,9 +270,9 @@ elif page == "📊 Client Nulls":
         st.markdown("**Expected columns:** `Date and time`, `Total system`")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE 3 — FREE PREDICTION
+# PAGE 3 — Prediction Check
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "🔮 Free Prediction":
+elif page == "🔮 Prediction Check":
     st.title("🔮 Generation Prediction — Historical Lookup")
     st.markdown(
         "Select any date and hour from our dataset to see what the model predicted "
