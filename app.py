@@ -286,7 +286,7 @@ elif page == "🔮 Prediction Check":
     with col1:
         selected_date = st.date_input(
             "Select a date",
-            value=date(2025, 6, 15),
+            value=date(2025, 7, 15),
             min_value=df["dt"].min().date(),
             max_value=df["dt"].max().date()
         )
