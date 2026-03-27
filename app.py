@@ -217,7 +217,7 @@ elif page == "📊 Compare to Client":
         st.subheader("Capacity Factor Correlation — KKP vs Client Site")
         df_clean = df_merged[~df_merged["is_null"]]
 
-        fig1, ax1 = plt.subplots(figsize=(6, 5))
+        fig1, ax1 = plt.subplots(figsize=(5, 4))
         ax1.scatter(df_clean["cf_kkp"], df_clean["cf_client"],
                     alpha=0.4, s=10, color="#f4a261")
         m, b = np.polyfit(df_clean["cf_kkp"], df_clean["cf_client"], 1)
